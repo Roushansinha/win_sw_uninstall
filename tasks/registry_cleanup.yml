@@ -1,0 +1,54 @@
+---
+- name: Cleanup registry exe
+  block:
+    - name: Check if primary file exists
+      win_stat:
+        path: '{{ path_1 }}'
+      register: output_1
+
+    - name: Check if secondary file exists
+      win_stat:
+        path: '{{ path_2 }}'
+      register: output_2
+
+    - name: Remove invalid registry entry and set result
+      block:
+        - name: Remove invalid registry entry
+          win_regedit:
+            path: '{{ item.1.path }}'
+            state: absent
+
+        - name: Set result
+          set_fact:
+            exists: false
+      when: not output_1.stat.exists | bool or not output_2.stat.exists
+
+    - name: Set result
+      set_fact:
+        exists: true
+      when: output_1.stat.exists | bool and output_2.stat.exists | bool
+  when: path_1 is defined and path_2 is defined
+
+- name: Cleanup registry msi
+  block:
+    - name: Remove invalid registry entry and set uninstall status
+      block:
+        - name: Remove invalid registry entry
+          win_regedit:
+            path: '{{ item.1.path }}'
+            state: absent
+
+        - name: Set uninstall status
+          set_fact:
+            uninstall_ran: false
+
+        - name: Set result
+          set_fact:
+            exists: false
+      when: return_code == '1605'
+
+    - name: Set result
+      set_fact:
+        exists: false
+      when: return_code == '0'
+  when: return_code is defined

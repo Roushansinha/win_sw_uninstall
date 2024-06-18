@@ -1,0 +1,29 @@
+---
+software:
+  - name: Google Chrome
+    arguments:
+      - /uninstall
+      - /channel=stable 
+      - /system-level 
+      - /verbose-logging
+      - /force-uninstall
+    version: 104.0.5112.105
+  - name: PuTTY
+    arguments:
+      - /S
+  - name: Firefox
+    arguments:
+      - /S
+  - name: Wireshark
+    arguments:
+      - /S
+  - name: 7-Zip
+    arguments:
+      - /S
+    version: 22
+  - name: WinSCP
+    arguments:
+      - /SILENT
+  - name: Notepad++
+    arguments:
+      - /S

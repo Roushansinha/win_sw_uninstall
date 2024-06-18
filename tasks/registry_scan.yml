@@ -1,0 +1,30 @@
+---
+- name: Get installed software list
+  win_reg_stat:
+    path: '{{ item }}'
+  loop:
+    - HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall
+    - HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall
+    - HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall
+    - HKCU:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall
+  register: software_keys_raw
+
+- name: Filter installed software information
+  set_fact:
+    software_keys: '{{ software_keys | default([]) + [ { "path": item.item, "keys": item.sub_keys } ] }}'
+  loop: '{{ software_keys_raw.results }}'
+  when: '"sub_keys" in item and item.sub_keys'
+
+- name: Get installed software details
+  win_reg_stat:
+    path: '{{ item.0.path }}\{{ item.1 }}'
+  loop: '{{ software_keys | subelements("keys") }}'
+  register: software_details_raw
+
+- name: Filter installed software details
+  set_fact:
+    software_details: '{{ software_details | default([]) + [ { "path": item.item.0.path + backslash + item.item.1, "details": item.properties } ] }}'
+  vars:
+    backslash: '\'
+  loop: '{{ software_details_raw.results }}'
+  when: item.properties and "DisplayName" in item.properties and "DisplayVersion" in item.properties and "UninstallString" in item.properties

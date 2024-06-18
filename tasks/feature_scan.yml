@@ -1,0 +1,19 @@
+---
+- name: Get installed software list
+  include_tasks: registry_scan.yml
+
+- name: Format scan results
+  set_fact:
+    software_installed: '{{ software_installed | default([]) + [ { "name": item.details.DisplayName.value, "version": item.details.DisplayVersion.value } ] }}'
+  loop: '{{ software_details }}'
+
+- name: Save and upload scan results
+  include_tasks: results_upload.yml
+  vars:
+    results: '{{ software_installed }}'
+    suffix: ''
+  when: results_upload | bool
+
+- name: Show scan results
+  debug:
+    msg: '{{ software_installed }}'

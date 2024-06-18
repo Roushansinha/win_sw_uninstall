@@ -1,0 +1,157 @@
+---
+- name: Set default uninstall status
+  set_fact:
+    uninstall_ran: false
+
+- name: Get uninstall string
+  set_fact:
+    uninstall_string: '{{ item.1.details.UninstallString.value }}'
+
+- name: Get uninstall path
+  set_fact:
+    uninstall_path: '{{ uninstall_string.split(quote)[1] }}'
+  vars:
+    quote: '"'
+  when: quote in uninstall_string
+
+- name: Get uninstall path
+  set_fact:
+    uninstall_path: '{{ uninstall_string }}'
+  vars:
+    quote: '"'
+  when: quote not in uninstall_string
+
+- name: Get software path
+  set_fact:
+    software_path: '{{ item.1.details.DisplayIcon.value }}'
+  when: '"DisplayIcon" in item.1.details'
+
+- name: Set software path
+  set_fact:
+    software_path: uninstall_path
+  when: '"DisplayIcon" not in item.1.details'
+
+- name: Filter software path
+  set_fact:
+    software_path: '{{ software_path.split(comma)[0] }}'
+  vars:
+    comma: ','
+  when: comma in software_path
+
+- name: Parse version input
+  block:
+    - name: Get minimum version length
+      set_fact:
+        version_len: '{{ item.0.version | string | length }}'
+
+    - name: Get minimum version
+      set_fact:
+        version_min: '{{ item.0.version | regex_replace("\.") }}'
+
+    - name: Get software version
+      set_fact:
+        version_cur: '{{ item.1.details.DisplayVersion.value[:version_len | int] | regex_replace("\.") }}'
+  when: '"version" in item.0'
+
+- name: Set default version
+  block:
+    - name: Get software version
+      set_fact:
+        version_cur: '{{ item.1.details.DisplayVersion.value | regex_replace("\.") }}'
+
+    - name: Set minimum version
+      set_fact:
+        version_min: '{{ version_cur | int + 1 }}'
+  when: '"version" not in item.0'
+
+- name: Uninstall exe
+  block:
+    - name: Cleanup registry exe
+      include_tasks: registry_cleanup.yml
+      vars:
+        path_1: '{{ uninstall_path }}'
+        path_2: '{{ software_path }}'
+
+    - name: Uninstall software
+      block:
+        - name: Add default uninstall arguments
+          set_fact:
+            uninstall_command: '"{{ uninstall_path }}" /S'
+          when: '"arguments" not in item.0'
+
+        - name: Add input uninstall arguments
+          set_fact:
+            uninstall_command: '"{{ uninstall_path }}" {{ item.0.arguments | join(" ") }}'
+          when: '"arguments" in item.0'
+
+        - name: Set uninstall status
+          set_fact:
+            uninstall_ran: true
+
+        - name: Run uninstall command and check result
+          include_tasks: command_uninstall.yml
+          vars:
+            type: 'exe'
+          loop: '{{ range(1, 4) | list }}'
+          loop_control:
+            loop_var: uninstall_attempt
+
+        - name: Set timeout output
+          set_fact:
+            output_uninstall: {'rc': '1', 'stderr': 'Uninstall command timeout'}
+          when: output_uninstall.rc is not defined
+
+        - name: Check failed uninstall
+          set_fact:
+            uninstall_failed: '{{ uninstall_failed + [ { "name": item.1.details.DisplayName.value, "version": item.1.details.DisplayVersion.value,
+                              "return_code": output_uninstall.rc, "error": output_uninstall.stderr } ] }}'
+      when: exists | bool
+
+    - name: Check successful uninstall
+      set_fact:
+        uninstall_successful: '{{ uninstall_successful + [ { "name": item.1.details.DisplayName.value, "version": item.1.details.DisplayVersion.value,
+                              "return_code": output_uninstall.rc } ] }}'
+      when: not exists | bool and uninstall_ran | bool
+  when: '"MsiExec.exe" not in uninstall_string and version_cur | int < version_min | int'
+
+- name: Uninstall msi
+  block:
+    - name: Set default software status
+      set_fact:
+        exists: true
+
+    - name: Uninstall software
+      block:
+        - name: Fix uninstall command
+          set_fact:
+            uninstall_path: '{{ uninstall_path | regex_replace("MsiExec\.exe /I", "MsiExec.exe /X") }}'
+          when: '"MsiExec.exe /I" in uninstall_path'
+
+        - name: Add default uninstall arguments
+          set_fact:
+            uninstall_command: '{{ uninstall_path }} /qn /norestart'
+
+        - name: Set uninstall status
+          set_fact:
+            uninstall_ran: true
+
+        - name: Run uninstall command and check result
+          include_tasks: command_uninstall.yml
+          vars:
+            type: 'msi'
+          loop: '{{ range(1, 4) | list }}'
+          loop_control:
+            loop_var: uninstall_attempt
+
+        - name: Check failed uninstall
+          set_fact:
+            uninstall_failed: '{{ uninstall_failed + [ { "name": item.1.details.DisplayName.value, "version": item.1.details.DisplayVersion.value,
+                              "return_code": output_uninstall.rc, "error": output_uninstall.stderr } ] }}'
+      when: exists | bool
+
+    - name: Check successful uninstall
+      set_fact:
+        uninstall_successful: '{{ uninstall_successful + [ { "name": item.1.details.DisplayName.value, "version": item.1.details.DisplayVersion.value,
+                              "return_code": output_uninstall.rc } ] }}'
+      when: not exists | bool and uninstall_ran | bool
+  when: '"MsiExec.exe" in uninstall_string and version_cur | int < version_min | int'

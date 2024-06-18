@@ -1,0 +1,8 @@
+---
+- name: Run scan feature
+  include_tasks: feature_scan.yml
+  when: feature == 'scan'
+
+- name: Run uninstall feature
+  include_tasks: feature_uninstall.yml
+  when: feature == 'uninstall'

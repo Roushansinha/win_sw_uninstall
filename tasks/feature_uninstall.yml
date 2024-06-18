@@ -1,0 +1,50 @@
+---
+- name: Fail missing input
+  fail:
+    msg: The input variable 'software_file' is not defined
+  when: software_file is not defined
+
+- name: Load and validate software list
+  block:
+    - name: Load software list
+      include_vars:
+        file: '{{ software_file }}'
+  rescue:
+    - name: Fail incorrect input syntax
+      fail:
+        msg: Input software file is missing or has incorrect syntax
+
+- name: Fail incorrect input name
+  fail:
+    msg: Root key 'software' is missing from the input software file
+  when: software is not defined
+
+- name: Get installed software list
+  include_tasks: registry_scan.yml
+
+- name: Uninstall software
+  include_tasks: software_uninstall.yml
+  loop: '{{ software | product(software_details) | list }}'
+  when: item.0.name in item.1.details.DisplayName.value
+
+- name: Save and upload succesful uninstall results
+  include_tasks: results_upload.yml
+  vars:
+    results: '{{ uninstall_successful }}'
+    suffix: '_successful'
+  when: results_upload | bool and uninstall_successful
+
+- name: Save and upload succesful uninstall results
+  include_tasks: results_upload.yml
+  vars:
+    results: '{{ uninstall_failed }}'
+    suffix: '_failed'
+  when: results_upload | bool and uninstall_failed
+
+- name: Show succesful uninstall results
+  debug:
+    msg: '{{ uninstall_successful }}'
+
+- name: Show failed uninstall results
+  debug:
+    msg: '{{ uninstall_failed }}'

@@ -1,0 +1,6 @@
+---
+- name: Scan registry
+  hosts: all
+
+  tasks:
+  
